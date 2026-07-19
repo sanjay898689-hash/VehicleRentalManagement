@@ -1,0 +1,6 @@
+{
+  "devDependencies": {
+    "@ngrok/ngrok": "^1.7.0",
+    "localtunnel": "^2.0.2"
+  }
+}

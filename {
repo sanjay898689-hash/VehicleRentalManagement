@@ -1,0 +1,32 @@
+At line:1 char:58
++  node -e \const ngrok = require('@ngrok/ngrok'); (async () = try { co ...
++                                                          ~
+An expression was expected after '('.
+At line:1 char:147
++ ... wait ngrok.forward({ addr: 5000 }); console.log(listener.url()); } ca ...
++                                                                  ~
+An expression was expected after '('.
+At line:1 char:201
++ ... ner.url()); } catch (e) { console.error(e); process.exit(1); } })();"
++                                                                   ~
+Missing closing ')' in expression.
+At line:1 char:202
++ ... ner.url()); } catch (e) { console.error(e); process.exit(1); } })();"
++                                                                    ~
+Unexpected token '}' in expression or statement.
+At line:1 char:203
++ ... ner.url()); } catch (e) { console.error(e); process.exit(1); } })();"
++                                                                     ~
+Unexpected token ')' in expression or statement.
+At line:1 char:205
++ ... ner.url()); } catch (e) { console.error(e); process.exit(1); } })();"
++                                                                       ~
+An expression was expected after '('.
+At line:1 char:207
++ ... ner.url()); } catch (e) { console.error(e); process.exit(1); } })();"
++                                                                         ~
+The string is missing the terminator: ".
+    + CategoryInfo          : ParserError: (:) [], ParentContainsErrorRecordEx 
+   ception
+    + FullyQualifiedErrorId : ExpectedExpression
+ 

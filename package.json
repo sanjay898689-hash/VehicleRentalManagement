@@ -3,7 +3,8 @@
   "private": true,
   "scripts": {
     "dev": "cd frontend && npm install && npm run dev",
-    "build": "cd frontend && npm install && npm run build"
+    "build": "cd frontend && npm install && npm run build",
+    "vercel-build": "npm run build"
   },
   "devDependencies": {
     "@ngrok/ngrok": "^1.7.0",

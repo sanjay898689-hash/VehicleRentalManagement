@@ -2,17 +2,17 @@ const http = require("http");
 const express = require("express");
 const dotenv = require("dotenv");
 const cors = require("cors");
-const compression = require('compression');
-const helmet = require('helmet');
+const compression = require("compression");
+const helmet = require("helmet");
 const { Server } = require("socket.io");
 
 // Load environment variables first
 dotenv.config();
 
 // Validate critical environment variables
-if (!process.env.JWT_SECRET || process.env.JWT_SECRET.trim() === '') {
-  console.error('❌ Missing required environment variable: JWT_SECRET');
-  console.error('Please set JWT_SECRET in your environment or in backend/.env. See ../DEPLOYMENT_ENV_SETUP.md for details.');
+if (!process.env.JWT_SECRET || process.env.JWT_SECRET.trim() === "") {
+  console.error("❌ Missing required environment variable: JWT_SECRET");
+  console.error("Please set JWT_SECRET in your environment or in backend/.env.");
   process.exit(1);
 }
 
@@ -22,39 +22,74 @@ const seedData = require("./seeder");
 const app = express();
 const server = http.createServer(app);
 
-// Socket.io
-const allowedOrigins = (() => {
-  if (process.env.CORS_ORIGIN) {
-    const origins = process.env.CORS_ORIGIN.split(",").map((origin) => origin.trim());
-    if (origins.length === 1 && origins[0] === "*") {
-      return "*";
-    }
-    return origins;
+const buildAllowedOrigins = () => {
+  const configuredOrigins = (process.env.CORS_ORIGIN || "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  return configuredOrigins.length > 0
+    ? configuredOrigins
+    : [
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:3000",
+      ];
+};
+
+const allowedOrigins = buildAllowedOrigins();
+
+const isAllowedOrigin = (origin) => {
+  if (!origin) return true;
+
+  if (allowedOrigins.includes("*") || allowedOrigins.includes(origin)) {
+    return true;
   }
 
-  return [
-    "http://localhost:5173",
-    "http://localhost:5174",
-    "http://localhost:5175",
-    "http://localhost:5176",
-    "http://127.0.0.1:5173",
-    "http://127.0.0.1:5174",
-    "http://127.0.0.1:5175",
-    "http://127.0.0.1:5176",
-    "http://0.0.0.0:5175",
-  ];
-})();
+  return allowedOrigins.some((allowedOrigin) => {
+    if (!allowedOrigin.includes("*")) {
+      return false;
+    }
+
+    const regexPattern = `^${allowedOrigin.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\\\*/g, ".*")}$`;
+    return new RegExp(regexPattern, "i").test(origin);
+  }) || /^(https:\/\/.*\.vercel\.app)$/i.test(origin) || /^http:\/\/localhost(:\d+)?$/i.test(origin) || /^http:\/\/127\.0\.0\.1(:\d+)?$/i.test(origin) || /^http:\/\/0\.0\.0\.0(:\d+)?$/i.test(origin);
+};
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (isAllowedOrigin(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error("Not allowed by CORS"));
+  },
+  credentials: true,
+};
 
 const io = new Server(server, {
   cors: {
-    origin: allowedOrigins,
+    origin: (origin, callback) => {
+      if (isAllowedOrigin(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error("Not allowed by Socket.IO CORS"));
+    },
     methods: ["GET", "POST", "PUT", "DELETE"],
   },
 });
 
 // Middleware
 app.use(helmet({ contentSecurityPolicy: false }));
-app.use(cors({ origin: allowedOrigins }));
+app.use(compression());
+app.use(express.json());
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
+app.use(cors(corsOptions));
+
 // Allow external images and common external resources used by the frontend
 app.use((req, res, next) => {
   const policy = [
@@ -64,13 +99,10 @@ app.use((req, res, next) => {
     "style-src 'self' 'unsafe-inline' https:",
     "font-src 'self' data: https:",
     "connect-src 'self' https: ws: wss:",
-  ].join('; ');
-  res.setHeader('Content-Security-Policy', policy);
+  ].join("; ");
+  res.setHeader("Content-Security-Policy", policy);
   next();
 });
-app.use(compression());
-app.use(express.json());
-app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
 // Import routes
 const authRoutes = require("./routes/authRoutes");
@@ -80,9 +112,19 @@ const wishlistRoutes = require("./routes/wishlistRoutes");
 const paymentRoutes = require("./routes/paymentRoutes");
 const uploadRoutes = require("./routes/uploadRoutes");
 
+// Root endpoint for Render health checks
+app.get("/", (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "Vehicle Rental Management Backend Running",
+    api: "/api",
+    status: "online",
+  });
+});
+
 // Health check
-app.get('/api/health', (req, res) => {
-  res.json({ success: true, status: 'ok' });
+app.get("/api/health", (req, res) => {
+  res.json({ success: true, status: "ok" });
 });
 
 // API Routes
@@ -91,7 +133,13 @@ app.use("/api/vehicles", vehicleRoutes);
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/wishlist", wishlistRoutes);
 app.use("/api/payments", paymentRoutes);
+app.use("/api/upload", uploadRoutes);
 app.use("/api/uploads", uploadRoutes);
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({ success: false, message: "Route not found" });
+});
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -107,28 +155,11 @@ const startServer = async () => {
   try {
     // Connect to MongoDB
     await connectDB();
-    
-    // Start listening only after DB is connected
-    // If a production build exists in ../frontend/dist, serve it as static files
-    const path = require('path');
-    const distPath = path.resolve(__dirname, '..', 'frontend', 'dist');
-    const fs = require('fs');
-
-    if (fs.existsSync(distPath)) {
-      app.use(express.static(distPath));
-      app.get('/', (req, res) => {
-        res.sendFile(path.join(distPath, 'index.html'));
-      });
-      app.get('*', (req, res) => {
-        res.sendFile(path.join(distPath, 'index.html'));
-      });
-      console.log('📦 Serving frontend from', distPath);
-    }
 
     // Auto-seed sample data on first launch when configured
-    if (process.env.AUTO_SEED === 'true') {
+    if (process.env.AUTO_SEED === "true") {
       await seedData({ exitAfter: false });
-      console.log('🎯 Seed completed, continuing startup');
+      console.log("🎯 Seed completed, continuing startup");
     }
 
     // Start the HTTP server so Socket.IO works correctly
@@ -137,10 +168,10 @@ const startServer = async () => {
     });
 
     // Basic Socket.IO connection logging
-    io.on('connection', (socket) => {
-      console.log('🔌 New socket connected:', socket.id);
-      socket.on('disconnect', () => {
-        console.log('🔌 Socket disconnected:', socket.id);
+    io.on("connection", (socket) => {
+      console.log("🔌 New socket connected:", socket.id);
+      socket.on("disconnect", () => {
+        console.log("🔌 Socket disconnected:", socket.id);
       });
     });
   } catch (error) {

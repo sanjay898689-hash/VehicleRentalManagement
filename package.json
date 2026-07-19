@@ -1,4 +1,10 @@
 {
+  "name": "vehicle-rental-management",
+  "private": true,
+  "scripts": {
+    "dev": "cd frontend && npm install && npm run dev",
+    "build": "cd frontend && npm install && npm run build"
+  },
   "devDependencies": {
     "@ngrok/ngrok": "^1.7.0",
     "localtunnel": "^2.0.2"
